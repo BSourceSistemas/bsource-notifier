@@ -1,5 +1,6 @@
 using BSourceNotifier.Application.Interfaces;
 using BSourceNotifier.Application.UseCases;
+using BSourceNotifier.Application;
 using BSourceNotifier.Infrastructure.Channels;
 using BSourceNotifier.Infrastructure.Options;
 using BSourceNotifier.Infrastructure.SignalR;
@@ -17,6 +18,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<NotificationPresenceRegistry>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DevCors", policy =>

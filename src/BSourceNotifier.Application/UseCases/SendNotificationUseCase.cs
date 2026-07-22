@@ -10,10 +10,12 @@ public sealed class SendNotificationUseCase
 {
     private readonly IEnumerable<INotificationChannel> _channels;
     private readonly ILogger<SendNotificationUseCase> _logger;
+    private readonly NotificationPresenceRegistry _presence;
 
-    public SendNotificationUseCase(IEnumerable<INotificationChannel> channels, ILogger<SendNotificationUseCase> logger)
+    public SendNotificationUseCase(IEnumerable<INotificationChannel> channels, NotificationPresenceRegistry presence, ILogger<SendNotificationUseCase> logger)
     {
         _channels = channels;
+        _presence = presence;
         _logger = logger;
     }
 
@@ -55,6 +57,16 @@ public sealed class SendNotificationUseCase
             {
                 _logger.LogError(ex, "Failed to send notification {NotificationId} via {ChannelType}.", notification.Id, channelType);
             }
+        }
+
+        if (command.EmailFallbackWhenOffline &&
+            !string.IsNullOrWhiteSpace(command.ApplicationId) &&
+            !_presence.IsOnline(command.ApplicationId, command.Target.UserId) &&
+            !notification.Channels.Contains(NotificationChannelType.Email))
+        {
+            var email = _channels.FirstOrDefault(c => c.ChannelType == NotificationChannelType.Email);
+            if (email is not null)
+                await email.SendAsync(notification, cancellationToken);
         }
     }
 
