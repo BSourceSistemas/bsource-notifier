@@ -6,6 +6,7 @@ public sealed class Notification
 {
     public Notification(
         Guid id,
+        string applicationId,
         string title,
         string message,
         IReadOnlyCollection<NotificationChannelType> channels,
@@ -13,6 +14,7 @@ public sealed class Notification
         DateTime createdAt)
     {
         Id = id;
+        ApplicationId = applicationId;
         Title = title;
         Message = message;
         Channels = channels;
@@ -21,6 +23,7 @@ public sealed class Notification
     }
 
     public Guid Id { get; }
+    public string ApplicationId { get; }
     public string Title { get; }
     public string Message { get; }
     public IReadOnlyCollection<NotificationChannelType> Channels { get; }

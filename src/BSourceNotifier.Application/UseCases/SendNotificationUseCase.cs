@@ -25,6 +25,7 @@ public sealed class SendNotificationUseCase
 
         var notification = new Notification(
             Guid.NewGuid(),
+            command.ApplicationId,
             command.Title,
             command.Message,
             channelTypes,

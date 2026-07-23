@@ -1,4 +1,5 @@
 using BSourceNotifier.Application.Interfaces;
+using BSourceNotifier.Application;
 using BSourceNotifier.Domain.Entities;
 using BSourceNotifier.Domain.Enums;
 using BSourceNotifier.Infrastructure.Options;
@@ -37,7 +38,7 @@ public sealed class WebSocketNotificationChannel : INotificationChannel
         var groupName = notification.Target.Endpoints.WebSocket?.Group;
         if (string.IsNullOrWhiteSpace(groupName))
         {
-            groupName = $"user-{notification.Target.UserId}";
+            groupName = NotificationPresenceRegistry.GroupName(notification.ApplicationId, notification.Target.UserId);
         }
         _logger.LogInformation("Sending WebSocket notification {NotificationId} to group {GroupName}.", notification.Id, groupName);
         await _hubContext.Clients.Group(groupName).SendAsync(
