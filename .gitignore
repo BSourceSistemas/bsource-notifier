@@ -20,6 +20,7 @@
 
 # Logs
 *.log
+docker/.env.local
 
 # NuGet packages
 *.nupkg

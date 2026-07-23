@@ -78,6 +78,13 @@ A API ficará disponível em `http://localhost:5000`. Variáveis de ambiente pod
 
 Toda a configuração fica na seção `Notification` do `appsettings.json` ou via variáveis de ambiente (ideal para Docker).
 
+### CORS / SignalR
+
+| Configuração | Variável de ambiente | Padrão | Descrição |
+|-------------|----------------------|--------|-----------|
+| `Cors:AllowedOriginHosts` | `CORS_ALLOWED_ORIGIN_HOSTS` | `localhost,127.0.0.1,192.167.0.1` | Lista de hosts/IPs aceitos no `negotiate` do SignalR, independente da porta. |
+| `Cors:AllowedOrigins` | `CORS_ALLOWED_ORIGINS` | — | Lista de origens exatas aceitas, separadas por vírgula. Use quando precisar restringir por esquema e porta, ex.: `http://192.167.0.1:3000`. |
+
 ### E-mail / SMTP
 
 | Configuração | Variável de ambiente | Padrão | Descrição |
@@ -155,6 +162,8 @@ Toda a configuração fica na seção `Notification` do `appsettings.json` ou vi
 ### Conexão
 
 Hub disponível em `/hubs/notifications`. O servidor adiciona o cliente ao grupo `user-{userId}` automaticamente.
+
+Se o front-end estiver em outra máquina, domínio ou porta, adicione a origem exata em `Cors:AllowedOrigins` ou pelo menos o host/IP em `Cors:AllowedOriginHosts`; sem isso o `POST /hubs/notifications/negotiate` será bloqueado pelo navegador por CORS.
 
 ```javascript
 const connection = new signalR.HubConnectionBuilder()
