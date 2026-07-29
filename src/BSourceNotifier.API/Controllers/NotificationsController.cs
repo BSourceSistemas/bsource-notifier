@@ -1,3 +1,4 @@
+using BSourceNotifier.API.Security;
 using BSourceNotifier.Application.UseCases;
 using BSourceNotifier.Contracts.Commands;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,7 @@ public sealed class NotificationsController : ControllerBase
     }
 
     [HttpPost("send")]
+    [ServiceFilter(typeof(ApiKeyAuthorizationFilter))]
     public async Task<IActionResult> SendAsync([FromBody] SendNotificationCommand command, CancellationToken cancellationToken)
     {
         await _useCase.ExecuteAsync(command, cancellationToken);

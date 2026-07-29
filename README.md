@@ -85,6 +85,24 @@ Toda a configuração fica na seção `Notification` do `appsettings.json` ou vi
 | `Cors:AllowedOriginHosts` | `CORS_ALLOWED_ORIGIN_HOSTS` | `localhost,127.0.0.1,192.167.0.1` | Lista de hosts/IPs aceitos no `negotiate` do SignalR, independente da porta. |
 | `Cors:AllowedOrigins` | `CORS_ALLOWED_ORIGINS` | — | Lista de origens exatas aceitas, separadas por vírgula. Use quando precisar restringir por esquema e porta, ex.: `http://192.167.0.1:3000`. |
 
+### Segurança da API
+
+`POST /api/notifications/send` exige o header `X-Api-Key`. Configure apenas hashes SHA-256 das chaves em `Notification:Security:AuthorizedClients`; a chave em texto puro deve ficar somente no cliente chamador, por variável de ambiente ou cofre de segredos.
+
+| Configuração | Variável de ambiente | Descrição |
+|-------------|----------------------|-----------|
+| `Notification:Security:AuthorizedClients:0:Name` | `NOTIFICATION_SECURITY_CLIENT_0_NAME` | Nome estruturado do cliente autorizado, ex.: `Aplicacao1`. |
+| `Notification:Security:AuthorizedClients:0:ApiKeyHash` | `NOTIFICATION_SECURITY_CLIENT_0_API_KEY_HASH` | SHA-256 em hexadecimal da chave real. |
+
+Para gerar uma chave aleatória com pelo menos 32 bytes e calcular o hash:
+
+```bash
+API_KEY="$(openssl rand -base64 32)"
+printf '%s' "$API_KEY" | sha256sum
+```
+
+Em sua aplicação, armazene a chave real como `BSourceNotifier__ApiKey`. No Notifier, armazene somente o hash resultante.
+
 ### E-mail / SMTP
 
 | Configuração | Variável de ambiente | Padrão | Descrição |
@@ -154,6 +172,8 @@ Toda a configuração fica na seção `Notification` do `appsettings.json` ou vi
 | Status | Descrição |
 |--------|-----------|
 | `202 Accepted` | Notificação aceita para processamento. |
+| `401 Unauthorized` | Header `X-Api-Key` ausente. |
+| `403 Forbidden` | Header `X-Api-Key` inválido. |
 
 ---
 

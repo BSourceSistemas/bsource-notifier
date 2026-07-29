@@ -1,3 +1,4 @@
+using BSourceNotifier.API.Security;
 using BSourceNotifier.Application.Interfaces;
 using BSourceNotifier.Application.UseCases;
 using BSourceNotifier.Application;
@@ -33,6 +34,9 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notification"));
+builder.Services.Configure<NotificationSecurityOptions>(builder.Configuration.GetSection("Notification:Security"));
+builder.Services.AddSingleton<IApiKeyValidator, Sha256ApiKeyValidator>();
+builder.Services.AddScoped<ApiKeyAuthorizationFilter>();
 
 builder.Services.AddScoped<SendNotificationUseCase>();
 builder.Services.AddScoped<INotificationChannel, WebSocketNotificationChannel>();
@@ -87,3 +91,5 @@ static bool IsAllowedOrigin(string origin, IReadOnlyCollection<string> allowedOr
 
     return allowedOriginHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
 }
+
+public partial class Program;

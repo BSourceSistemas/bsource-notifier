@@ -1,6 +1,29 @@
 @BSourceNotifier.API_HostAddress = http://localhost:5000
+@BSourceNotifier_API_Key = replace-with-local-secret
 
-GET {{BSourceNotifier.API_HostAddress}}/weatherforecast/
+GET {{BSourceNotifier.API_HostAddress}}/health
 Accept: application/json
 
 ###
+
+POST {{BSourceNotifier.API_HostAddress}}/api/notifications/send
+Content-Type: application/json
+X-Api-Key: {{BSourceNotifier_API_Key}}
+
+{
+  "applicationId": "Aplicacao1",
+  "title": "Bem-vindo!",
+  "message": "<h1>Olá @Model.Name</h1>",
+  "channels": ["Email"],
+  "target": {
+    "userId": "user-456",
+    "endpoints": {
+      "email": {
+        "to": "novo-usuario@empresa.com"
+      }
+    },
+    "data": {
+      "name": "Maria"
+    }
+  }
+}
