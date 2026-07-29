@@ -10,7 +10,7 @@ COPY src/BSourceNotifier.Contracts/BSourceNotifier.Contracts.csproj         src/
 COPY src/BSourceNotifier.Domain/BSourceNotifier.Domain.csproj               src/BSourceNotifier.Domain/
 COPY src/BSourceNotifier.Infrastructure/BSourceNotifier.Infrastructure.csproj src/BSourceNotifier.Infrastructure/
 
-RUN dotnet restore BSourceNotifier.sln
+RUN dotnet restore src/BSourceNotifier.API/BSourceNotifier.API.csproj
 
 # Copy everything else and publish
 COPY . .
