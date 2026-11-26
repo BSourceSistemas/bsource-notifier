@@ -26,10 +26,11 @@ services:
       # ── Notification – Email / SMTP ──────────────────────
       Notification__Email__Enabled: ${EMAIL_ENABLED:-true}
       Notification__Email__From: ${EMAIL_FROM:-admin@hubconn.com.br}
+      Notification__Email__Smtp__AuthenticationMode: ${SMTP_AUTHENTICATION_MODE:-Credentials}
       Notification__Email__Smtp__Host: ${SMTP_HOST:-smtp.gmail.com}
       Notification__Email__Smtp__Port: ${SMTP_PORT:-587}
-      Notification__Email__Smtp__Username: ${SMTP_USERNAME:-admin@hubconn.com.br}
-      Notification__Email__Smtp__Password: ${SMTP_PASSWORD:-changeme}
+      Notification__Email__Smtp__Username: ${SMTP_USERNAME-admin@hubconn.com.br}
+      Notification__Email__Smtp__Password: ${SMTP_PASSWORD-changeme}
       Notification__Email__Smtp__EnableSsl: ${SMTP_ENABLE_SSL:-true}
 
       # ── Notification – SMS / Telegram / WhatsApp ─────────

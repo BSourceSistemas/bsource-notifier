@@ -1,37 +1,30 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# CI/CD — Notifier
-#
-# Gatilho:
-#   workflow_dispatch → Publicação manual → Docker Hub:
-#                       bsourcedev/bsource-notifier:hml-X.Y.Z
-#                       Acionar em: GitHub → Actions → CI/CD — Notifier
-#                       → Run workflow
-#
-# Secrets necessários no repositório (Settings → Secrets → Actions):
-#   DOCKERHUB_TOKEN     — Access Token gerado em hub.docker.com → Account Settings
-#                         → Security → New Access Token (permissão: Read & Write)
-#
-# SemVer automático:
-#   Calculado a partir de Conventional Commits pelo step "Calcular versão".
-#   Como este workflow é manual, roda em dry-run e não cria tag git.
-# ─────────────────────────────────────────────────────────────────────────────
-
+# Manual release: bsourcedev/bsource-notifier:X.Y.Z (no environment prefix).
+# Requires DOCKERHUB_TOKEN with write access. Successful releases create vX.Y.Z.
 name: CI/CD — Notifier
 
 on:
-  # Publicação acionada manualmente: Actions → CI/CD — Notifier → Run workflow
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: notifier-release
+  cancel-in-progress: false
 
 jobs:
   build-and-push:
-    name: Build e publicação da imagem Docker
+    name: Testes, build e publicação da imagem Docker
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Histórico completo necessário para cálculo de SemVer
+          fetch-depth: 0
+
+      - name: Testar com .NET 8 e SMTP STARTTLS
+        run: bash tests/run-tests.sh
 
       - name: Calcular versão (SemVer)
         id: version
@@ -41,14 +34,15 @@ jobs:
           dry_run: true
           default_bump: patch
           tag_prefix: v
+          release_branches: .*
 
       - name: Definir tags da imagem Docker
         id: tags
+        env:
+          VERSION: ${{ steps.version.outputs.new_version }}
         run: |
-          VERSION="${{ steps.version.outputs.new_version }}"
-          IMAGE="bsourcedev/bsource-notifier"
-
-          echo "tags=${IMAGE}:hml-${VERSION}" >> "$GITHUB_OUTPUT"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "tags=bsourcedev/bsource-notifier:${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -68,7 +62,27 @@ jobs:
           username: bsourcedev
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Impedir sobrescrita da versão
+        env:
+          IMAGE: ${{ steps.tags.outputs.tags }}
+          VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          if git show-ref --verify --quiet "refs/tags/v${VERSION}"; then
+            echo "Tag Git v${VERSION} já existe." >&2
+            exit 1
+          fi
+          if docker buildx imagetools inspect "$IMAGE" > /tmp/notifier-manifest 2> /tmp/notifier-manifest-error; then
+            echo "A imagem ${IMAGE} já existe; publicação cancelada." >&2
+            exit 1
+          fi
+          # Network/authentication errors must not be treated as an absent tag.
+          if ! grep -Eqi 'manifest unknown|not found' /tmp/notifier-manifest-error; then
+            cat /tmp/notifier-manifest-error >&2
+            exit 1
+          fi
+
       - name: Build e push da imagem
+        id: publish
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -81,3 +95,38 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.version.outputs.new_version }}
+
+      - name: Confirmar digest e registrar entrega
+        env:
+          IMAGE: ${{ steps.tags.outputs.tags }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          REMOTE_DIGEST="$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' | jq -r .digest)"
+          test "$REMOTE_DIGEST" = "$DIGEST"
+          {
+            echo "## Imagem publicada"
+            echo "- Versão: ${VERSION}"
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Tag: ${IMAGE}"
+            echo "- Referência imutável: bsourcedev/bsource-notifier@${DIGEST}"
+            echo "- Aceite de recebimento: executar no servidor de destino. HTTP 202 não comprova entrega."
+          } | tee release.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Registrar tag Git da versão publicada
+        env:
+          VERSION: ${{ steps.version.outputs.new_version }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "v${VERSION}" "$GITHUB_SHA" -m "bsourcedev/bsource-notifier:${VERSION} ${DIGEST}"
+          git push origin "refs/tags/v${VERSION}"
+
+      - name: Guardar identificação da imagem
+        if: always() && steps.publish.outputs.digest != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: notifier-release
+          path: release.txt
+          if-no-files-found: warn
