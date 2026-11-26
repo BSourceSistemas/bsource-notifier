@@ -6,6 +6,7 @@ using BSourceNotifier.Infrastructure.Channels;
 using BSourceNotifier.Infrastructure.Options;
 using BSourceNotifier.Infrastructure.SignalR;
 using Serilog;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 const string CorsPolicyName = "ConfiguredCors";
@@ -33,7 +34,10 @@ builder.Services.AddCors(options =>
             .AllowCredentials());
 });
 
-builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notification"));
+builder.Services.AddSingleton<IValidateOptions<NotificationOptions>, NotificationOptionsValidator>();
+builder.Services.AddOptions<NotificationOptions>()
+    .Bind(builder.Configuration.GetSection("Notification"))
+    .ValidateOnStart();
 builder.Services.Configure<NotificationSecurityOptions>(builder.Configuration.GetSection("Notification:Security"));
 builder.Services.AddSingleton<IApiKeyValidator, Sha256ApiKeyValidator>();
 builder.Services.AddScoped<ApiKeyAuthorizationFilter>();

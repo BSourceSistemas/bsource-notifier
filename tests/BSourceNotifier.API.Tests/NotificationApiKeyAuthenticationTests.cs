@@ -31,7 +31,8 @@ public sealed class NotificationApiKeyAuthenticationTests
         var response = await client.PostAsJsonAsync("/api/notifications/send", CreateCommand());
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Empty(await response.Content.ReadAsStringAsync());
+        var problem = await response.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Mvc.ProblemDetails>();
+        Assert.Equal(401, problem!.Status);
     }
 
     [Fact]
@@ -46,7 +47,8 @@ public sealed class NotificationApiKeyAuthenticationTests
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Empty(await response.Content.ReadAsStringAsync());
+        var problem = await response.Content.ReadFromJsonAsync<Microsoft.AspNetCore.Mvc.ProblemDetails>();
+        Assert.Equal(403, problem!.Status);
     }
 
     [Fact]

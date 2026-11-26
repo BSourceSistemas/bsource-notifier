@@ -48,7 +48,8 @@ Pré-requisito: .NET SDK 8.
 ```bash
 dotnet restore BSourceNotifier.sln
 dotnet build BSourceNotifier.sln
-dotnet test BSourceNotifier.sln
+# Suíte completa: .NET 8 e CA SMTP temporária em container isolado
+bash tests/run-tests.sh
 dotnet run --project src/BSourceNotifier.API
 ```
 
@@ -57,11 +58,13 @@ Por padrão, a aplicação local usa a configuração de `appsettings.json` e a 
 ## Execução com Docker
 
 ```bash
-docker compose -f docker/docker-compose.yml up --build -d
-docker compose -f docker/docker-compose.yml down
+cp docker/.env.example docker/.env.local
+# Edite docker/.env.local com a configuração do seu ambiente.
+docker compose --env-file docker/.env.local -f docker/docker-compose.yml up --build -d
+docker compose --env-file docker/.env.local -f docker/docker-compose.yml down
 ```
 
-O container expõe a porta `5000`. O arquivo `docker-compose-local.yml` carrega adicionalmente `docker/.env.local`; não versione esse arquivo se ele contiver segredos. As variáveis do Compose sobrescrevem a configuração JSON usando `__` como separador.
+O container expõe a porta `5000`. Use `--env-file docker/.env.local` também ao executar `docker-compose-local.yml`: o `env_file` do serviço injeta variáveis no container, mas não alimenta a interpolação `${...}` do Compose. Não versione arquivos com segredos. As variáveis do Compose sobrescrevem a configuração JSON usando `__` como separador.
 
 ## Configuração do servidor
 
@@ -100,11 +103,52 @@ O CORS permite headers, métodos e credenciais. Para um front-end em outro domí
 |---|---|---:|---|
 | `Notification:Email:Enabled` | `EMAIL_ENABLED` | `true` | Ativa o canal |
 | `Notification:Email:From` | `EMAIL_FROM` | — | Remetente |
+| `Notification:Email:Smtp:AuthenticationMode` | `SMTP_AUTHENTICATION_MODE` | `Credentials` | `Credentials` autentica; `None` usa relay autorizado por IP, sem AUTH |
 | `Notification:Email:Smtp:Host` | `SMTP_HOST` | — | Servidor SMTP |
 | `Notification:Email:Smtp:Port` | `SMTP_PORT` | — | Porta SMTP |
-| `Notification:Email:Smtp:Username` | `SMTP_USERNAME` | — | Usuário SMTP |
-| `Notification:Email:Smtp:Password` | `SMTP_PASSWORD` | — | Senha/app password |
-| `Notification:Email:Smtp:EnableSsl` | `SMTP_ENABLE_SSL` | — | TLS/SSL |
+| `Notification:Email:Smtp:Username` | `SMTP_USERNAME` | — | Obrigatório em `Credentials`; ignorado em `None` |
+| `Notification:Email:Smtp:Password` | `SMTP_PASSWORD` | — | Obrigatória em `Credentials`; ignorada em `None` |
+| `Notification:Email:Smtp:EnableSsl` | `SMTP_ENABLE_SSL` | `true` nos exemplos | STARTTLS; obrigatório em `None` |
+
+#### SMTP autenticado (padrão)
+
+```dotenv
+EMAIL_ENABLED=true
+EMAIL_FROM=noreply@exemplo.com
+SMTP_AUTHENTICATION_MODE=Credentials
+SMTP_HOST=smtp.exemplo.com
+SMTP_PORT=587
+SMTP_USERNAME=usuario-smtp
+SMTP_PASSWORD=substitua-pelo-segredo
+SMTP_ENABLE_SSL=true
+```
+
+Omitir `AuthenticationMode` mantém `Credentials`. Com e-mail habilitado, usuário e senha devem estar completos; campos vazios ou compostos apenas por espaços impedem a inicialização. `EnableSsl=false` continua permitido em `Credentials` por compatibilidade.
+
+#### Relay autorizado por IP, sem autenticação SMTP
+
+```dotenv
+EMAIL_ENABLED=true
+EMAIL_FROM=noreply@exemplo.com
+SMTP_AUTHENTICATION_MODE=None
+SMTP_HOST=relay.exemplo.com
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_ENABLE_SSL=true
+```
+
+Nesse modo, o cliente usa `UseDefaultCredentials=false` e `Credentials=null`, ignora credenciais residuais e não envia `AUTH`, mesmo quando anunciado pelo relay. O administrador do relay deve autorizar o IP de saída efetivamente visto por ele (incluindo NAT) e permitir o remetente/destinatário desejados. A porta deve ser a porta STARTTLS informada pelo administrador.
+
+Com e-mail habilitado, `None` com `EnableSsl=false` e modos desconhecidos impedem a inicialização. STARTTLS indisponível causa falha de envio, sem fallback para texto claro. O `SmtpClient` usa STARTTLS, não TLS implícito da porta 465. Certificados devem ter cadeia confiável, nome correspondente ao host e validade vigente. Para uma CA interna, instale sua raiz no trust store do container; não desabilite a validação do certificado.
+
+As variáveis curtas acima são interpoladas pelo Compose. Em `docker run` ou configuração direta, use, por exemplo, `Notification__Email__Smtp__AuthenticationMode=None` e `Notification__Email__Smtp__EnableSsl=true`.
+
+#### Diagnóstico e testes SMTP
+
+Execute `bash tests/run-tests.sh` com Docker disponível. O script executa a suíte em .NET 8, cria certificados temporários e confia na CA somente no container descartável. Os testes verificam os comandos SMTP antes/depois de STARTTLS, ausência de AUTH, autenticação válida/recusada, certificados não confiáveis/com nome incorreto, configuração e envio HTTP até um servidor SMTP de teste. Isso não substitui o aceite de entrega no servidor de destino.
+
+Falhas SMTP registram `NotificationId`, `SmtpHost`, `SmtpPort`, `AuthenticationMode`, `EnableSsl`, `SmtpStatusCode` e a exceção com suas causas internas. Ausência de STARTTLS aparece como falta de suporte a conexão segura; certificado inválido inclui a causa de autenticação TLS; credenciais recusadas aparecem como falha de autenticação SMTP. O `SmtpClient` pode apresentar o `530` recebido após uma tentativa de AUTH recusada, em vez do `535` original. Nenhuma senha, usuário SMTP ou corpo é acrescentado aos logs pelo canal.
 
 ### Toggles dos canais
 
@@ -128,7 +172,7 @@ Corpo:
 | `applicationId` | string | Identificador da aplicação de origem; necessário para o agrupamento padrão e para o fallback offline |
 | `title` | string | Assunto do e-mail e título do evento SignalR |
 | `message` | string | HTML/Razor para e-mail; texto/HTML literal no evento SignalR |
-| `channels` | array | Valores `Email`, `WebSocket`, `Sms`, `Telegram`, `WhatsApp` |
+| `channels` | array | Valores numéricos: `WebSocket=0`, `Email=1`, `Sms=2`, `Telegram=3`, `WhatsApp=4` |
 | `target.userId` | string | Identificador do destinatário |
 | `target.endpoints.email.to` | string | E-mail, quando `Email` for solicitado |
 | `target.endpoints.webSocket.group` | string | Grupo SignalR opcional |
@@ -145,7 +189,7 @@ curl -X POST http://localhost:5000/api/notifications/send \
     "applicationId": "billing",
     "title": "Pedido aprovado",
     "message": "<h1>Olá @Model.Name</h1><p>Pedido @Model.OrderId aprovado.</p>",
-    "channels": ["Email"],
+    "channels": [1],
     "target": {
       "userId": "user-123",
       "endpoints": { "email": { "to": "cliente@exemplo.com" } },
@@ -207,6 +251,27 @@ O registro de presença é somente em memória. Em múltiplas réplicas, o clien
 ## Observabilidade e operação
 
 O Serilog escreve logs estruturados no console. Os logs registram autenticação, grupo SignalR, canal e falhas, mas não devem receber chaves ou dados sensíveis. Como não há persistência nem fila, o operador deve acompanhar falhas em tempo real; reinícios perdem a presença em memória e não reprocessam mensagens.
+
+## Publicação e aceite no servidor de destino
+
+O workflow manual `CI/CD — Notifier` executa a suíte antes de publicar no Docker Hub. A imagem usa `bsourcedev/bsource-notifier:X.Y.Z`, sem prefixo `hml`; versões existentes não são sobrescritas. O resumo e o artefato `notifier-release` registram versão, commit e digest verificado no registry. A tag Git `vX.Y.Z` registra a versão publicada e serve de base para o próximo cálculo SemVer.
+
+No destino, use a referência imutável entregue:
+
+```bash
+docker pull bsourcedev/bsource-notifier@sha256:<digest-publicado>
+```
+
+Configure o container com o modo `None`, STARTTLS habilitado e os dados do relay. Preserve a chave/hash da API do ambiente. Faça o teste pela API do Notifier, usando `channels: [1]` (Email) e um identificador único no assunto, por exemplo `Aceite SMTP <versão> <data-hora>`.
+
+O aceite requer:
+
+1. Registrar versão, digest, horário, remetente, destinatário e identificador do teste.
+2. Enviar uma notificação pelo endpoint documentado e verificar os logs do Notifier.
+3. Confirmar a mensagem na caixa do destinatário, incluindo assunto e conteúdo; correlacionar com logs/ID de fila do relay quando disponíveis.
+4. Registrar o resultado no ambiente de destino. Se houver apenas `202` ou aceitação pelo relay, a entrega continua pendente.
+
+A operação do servidor de destino executa e confirma esse teste. Para rollback, reutilize o digest anterior e sua configuração compatível.
 
 ## Licença
 

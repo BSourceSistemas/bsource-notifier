@@ -7,6 +7,7 @@ using BSourceNotifier.Domain.Entities;
 using BSourceNotifier.Domain.Enums;
 using BSourceNotifier.Infrastructure.Options;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using RazorLight;
 
 namespace BSourceNotifier.Infrastructure.Channels;
@@ -14,13 +15,15 @@ namespace BSourceNotifier.Infrastructure.Channels;
 public sealed class EmailNotificationChannel : INotificationChannel
 {
     private readonly IOptions<NotificationOptions> _options;
+    private readonly ILogger<EmailNotificationChannel> _logger;
     private static readonly RazorLightEngine RazorEngine = new RazorLightEngineBuilder()
         .UseMemoryCachingProvider()
         .Build();
 
-    public EmailNotificationChannel(IOptions<NotificationOptions> options)
+    public EmailNotificationChannel(IOptions<NotificationOptions> options, ILogger<EmailNotificationChannel> logger)
     {
         _options = options;
+        _logger = logger;
     }
 
     public NotificationChannelType ChannelType => NotificationChannelType.Email;
@@ -54,11 +57,28 @@ public sealed class EmailNotificationChannel : INotificationChannel
 
         using var client = new SmtpClient(settings.Smtp.Host, settings.Smtp.Port)
         {
-            Credentials = new NetworkCredential(settings.Smtp.Username, settings.Smtp.Password),
+            UseDefaultCredentials = false,
+            Credentials = settings.Smtp.AuthenticationMode switch
+            {
+                SmtpAuthenticationMode.None => null,
+                SmtpAuthenticationMode.Credentials => new NetworkCredential(settings.Smtp.Username, settings.Smtp.Password),
+                _ => throw new InvalidOperationException("Unsupported SMTP AuthenticationMode.")
+            },
             EnableSsl = settings.Smtp.EnableSsl
         };
 
-        await client.SendMailAsync(message, cancellationToken);
+        try
+        {
+            await client.SendMailAsync(message, cancellationToken);
+        }
+        catch (SmtpException ex)
+        {
+            _logger.LogError(ex,
+                "SMTP send failed for notification {NotificationId} at {SmtpHost}:{SmtpPort} using {AuthenticationMode}, STARTTLS {EnableSsl}, status {SmtpStatusCode}.",
+                notification.Id, settings.Smtp.Host, settings.Smtp.Port,
+                settings.Smtp.AuthenticationMode, settings.Smtp.EnableSsl, ex.StatusCode);
+            throw;
+        }
     }
 
     private static object NormalizeModel(object? data)

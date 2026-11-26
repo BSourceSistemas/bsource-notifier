@@ -21,11 +21,18 @@ public sealed class EmailOptions : ChannelToggleOptions
 
 public sealed class SmtpOptions
 {
+    public SmtpAuthenticationMode AuthenticationMode { get; init; } = SmtpAuthenticationMode.Credentials;
     public string Host { get; init; } = string.Empty;
     public int Port { get; init; }
     public string Username { get; init; } = string.Empty;
     public string Password { get; init; } = string.Empty;
     public bool EnableSsl { get; init; }
+}
+
+public enum SmtpAuthenticationMode
+{
+    Credentials,
+    None
 }
 
 public class ChannelToggleOptions
